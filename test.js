@@ -1,1 +1,1 @@
-alert(“123gogogo”);
+alert(document.cookie);
